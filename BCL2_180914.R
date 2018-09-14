@@ -213,6 +213,8 @@ dev.off()
 # Using intensity cutpoint (0.1)
 df.cd20$myc.1 <- ifelse(df.cd20$nor.myc < 0.1, 0, 1)
 myc.1 <- aggregate(myc.1 ~ SN, data = df.cd20, FUN = sum)
+tot <- aggregate(myc.1 ~ SN, data = df.cd20, FUN = length)
+tot <- dplyr::rename(tot, total = myc.1)
 myc.pos <- inner_join(myc.1, tot, by = "SN")
 myc.pos$myc.ratio <- (myc.pos$myc.1 / myc.pos$total) * 100
 myc.pos <- dplyr::select(myc.pos, c(1,4))
@@ -277,7 +279,70 @@ print(g)
 jpeg(filename = "D:/Study/BCL2/bcl2 figure/myc_efs_conventional.jpg")
 print(g)
 dev.off()
+
+###################################################################
+#### Compare BCL2 intensity in BCL2 subgroup ######################
+###################################################################
+library(reshape2)
+
+bcl2.group <- dplyr::select(df.amc, c(1, 45))
+df.cd20.1 <- inner_join(df.cd20, bcl2.group, by = "SN")
+df.1 <- dplyr::select(df.cd20.1, c(15, 19))
+df.1 <- melt(df.1, id= "cut50")
+
+# Interleaved histograms
+g <- ggplot(df.1, aes(x = value, fill = cut50)) +
+        geom_histogram(position = "dodge", bins = 50) +
+        xlab("BCL2 intensity") +
+        scale_fill_manual(values = alpha(c("blue", "red"), 0.5),
+                          name = "BCL2 group",
+                          labels = c("< 50%", ">= 50%"))
+
+print(g)
+
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/compare_bcl2_int.jpg")
+print(g)
+dev.off()
+
 ###################################################################
 ############# BCL2 analysis using AQUA score ######################
 ###################################################################
+
+# calculate BCL2 AQUA score
+aq.bcl2 <- aggregate(nor.bcl2 ~ SN, data = df.cd20, FUN = sum)
+aqua.b <- inner_join(aq.bcl2, tot, by = ("SN" = "SN"))
+aqua.b <- dplyr::mutate(aqua.b, aq.bcl2 = nor.bcl2 / total)
+
+# calculate MYC AQUA score
+aq.myc <- aggregate(nor.myc ~ SN, data = df.cd20, FUN = sum)
+aqua.m <- inner_join(aq.myc, tot, by = ("SN" = "SN"))
+aqua.m <- dplyr::mutate(aqua.m, aq.myc = nor.myc / total)
+
+aqua <- inner_join(aqua.b, aqua.m, by = "SN")
+aqua <- dplyr::select(aqua, c(1, 4, 7))
+
+# merge data
+df.amc <- inner_join(aqua, df.amc, by = "SN")
+
+# compare BCL2 AQUA score in BCL2 cut50 subgroups (overlaid histograms)
+bcl2.comp <- dplyr::select(df.amc, c(2, 45))
+bcl2.comp <- melt(bcl2.comp, id = "cut50")
+
+g <- ggplot(bcl2.comp, aes(x = value, fill = cut50)) +
+        geom_histogram(position = "dodge", bins = 50) +
+        xlab("BCL2 AQUA score") +
+        scale_fill_manual(values = alpha(c("blue", "red"), 0.5),
+                          name = "BCL2 group",
+                          labels = c("< 50%", ">= 50%"))
+
+print(g)
+
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/compare_bcl2_aqua.jpg")
+print(g)
+dev.off()
+
+
+
+
+
 
