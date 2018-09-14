@@ -342,6 +342,161 @@ print(g)
 dev.off()
 
 
+###################################################################
+######Prognostic impact of BCL2 AQUA score in BCL2 group###########
+###################################################################
+
+# grouping BCL2 high and low group
+bcl2.hi <- dplyr::filter(df.amc, cut50 == "Positive")
+bcl2.lo <- dplyr::filter(df.amc, cut50 == "Negative")
+
+# BCL2 high group
+quantile(bcl2.hi$aq.bcl2, probs = c(0.1, 0.5, 0.9))
+# 10% 0.1124678 / 50% 0.1339340 / 90% 0.1666178
+
+quantile(bcl2.hi$aq.bcl2, probs = c(0.3, 0.6))
+# 30% 0.1233968 / 60% 0.1412220
+
+# 4 groups
+bcl2.hi <- 
+        dplyr::mutate(bcl2.hi, 
+                         aq.bcl2.gr = ifelse(aq.bcl2 < 0.1124678, 1,
+                                             ifelse(aq.bcl2 >= 0.1124678 & 
+                                                            aq.bcl2 < 0.1339340, 2,
+                                                    ifelse(aq.bcl2 >= 0.1339340 &
+                                                                   aq.bcl2 < 0.1666178, 3, 4))))
+
+# 3 groups
+bcl2.hi <-
+        dplyr::mutate(bcl2.hi,
+                      aq.bcl2.gr = ifelse(aq.bcl2 < 0.1233968, 1,
+                                          ifelse(aq.bcl2 >= 0.1233968 &
+                                                         aq.bcl2 < 0.1412220, 2, 3)))
+
+bcl2.hi$aq.bcl2.gr <- factor(bcl2.hi$aq.bcl2.gr,
+                             levels = c(1, 2, 3, 4),
+                             labels = c("Group 1", "Group 2", "Group 3", "Group4"))
+
+# K-M curve (OS)
+fit <- survfit(Surv(mon.os, OS == 1) ~ aq.bcl2.gr, data = bcl2.hi)
+g <- ggsurvplot(fit,
+                surv.plot.height = 0.8,
+                pval = FALSE, #pval.size = 4,
+                xlab = "Time (month)", font.x = 12,
+                ylab = "OS", font.y = 12,
+                main = "BCL2 high group",
+                risk.table = TRUE, risk.table.height = 0.35,
+                risk.table.fontsize = 3.5,
+                risk.table.y.text.col = FALSE,
+                legend = "bottom",
+                legend.tital = "BCL2 AQUA",
+                legend.labs = c("Group 1", "Group 2", "Group 3", "Group 4"),
+                palette = c("blue", "green", "yellow", "red"))
+
+g$table <- g$table +
+        theme(plot.title = element_text(hjust = 0))
+
+print(g)
+
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/bcl2hi_aqua_os.jpg")
+print(g)
+dev.off()
+
+# K-M curve (2yr EFS)
+fit <- survfit(Surv(mon.2yr.efs, yr2.Event == 1) ~ aq.bcl2.gr, data = bcl2.hi)
+g <- ggsurvplot(fit,
+                surv.plot.height = 0.8,
+                pval = FALSE, #pval.size = 4,
+                xlab = "Time (month)", font.x = 12,
+                ylab = "2yr EFS", font.y = 12,
+                main = "BCL2 high group",
+                risk.table = TRUE, risk.table.height = 0.35,
+                risk.table.fontsize = 3.5,
+                risk.table.y.text.col = FALSE,
+                legend = "bottom",
+                legend.tital = "BCL2 AQUA",
+                legend.labs = c("Group 1", "Group 2", "Group 3", "Group 4"),
+                palette = c("blue", "green", "yellow", "red"))
+
+g$table <- g$table +
+        theme(plot.title = element_text(hjust = 0))
+
+print(g)
+
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/bcl2hi_aqua_efs.jpg")
+print(g)
+dev.off()
+
+fit <- coxph(Surv(mon.os, OS == 1) ~ aq.bcl2, data = bcl2.hi)
+summary(fit)
+
+# BCL2 low group
+quantile(bcl2.lo$aq.bcl2, probs = c(0.1, 0.5, 0.9))
+# 10% 0.05934204 / 50% 0.07782767 / 90% 0.09856293
+
+bcl2.lo <- 
+        dplyr::mutate(bcl2.lo, 
+                      aq.bcl2.gr = ifelse(aq.bcl2 < 0.05934204, 1,
+                                          ifelse(aq.bcl2 >= 0.05934204 & 
+                                                         aq.bcl2 < 0.07782767, 2,
+                                                 ifelse(aq.bcl2 >= 0.07782767 &
+                                                                aq.bcl2 < 0.09856293, 3, 4))))
+bcl2.lo$aq.bcl2.gr <- factor(bcl2.lo$aq.bcl2.gr,
+                             levels = c(1, 2, 3, 4),
+                             labels = c("Group 1", "Group 2", "Group 3", "Group4"))
+
+# K-M curve (OS)
+fit <- survfit(Surv(mon.os, OS == 1) ~ aq.bcl2.gr, data = bcl2.lo)
+g <- ggsurvplot(fit,
+                surv.plot.height = 0.8,
+                pval = FALSE, #pval.size = 4,
+                xlab = "Time (month)", font.x = 12,
+                ylab = "OS", font.y = 12,
+                main = "BCL2 low group",
+                risk.table = TRUE, risk.table.height = 0.35,
+                risk.table.fontsize = 3.5,
+                risk.table.y.text.col = FALSE,
+                legend = "bottom",
+                legend.tital = "BCL2 AQUA",
+                legend.labs = c("Group 1", "Group 2", "Group 3", "Group 4"),
+                palette = c("blue", "green", "yellow", "red"))
+
+g$table <- g$table +
+        theme(plot.title = element_text(hjust = 0))
+
+print(g)
+
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/bcl2lo_aqua_os.jpg")
+print(g)
+dev.off()
+
+# K-M curve (2yr EFS)
+fit <- survfit(Surv(mon.2yr.efs, yr2.Event == 1) ~ aq.bcl2.gr, data = bcl2.lo)
+g <- ggsurvplot(fit,
+                surv.plot.height = 0.8,
+                pval = FALSE, #pval.size = 4,
+                xlab = "Time (month)", font.x = 12,
+                ylab = "2yr EFS", font.y = 12,
+                main = "BCL2 low group",
+                risk.table = TRUE, risk.table.height = 0.35,
+                risk.table.fontsize = 3.5,
+                risk.table.y.text.col = FALSE,
+                legend = "bottom",
+                legend.tital = "BCL2 AQUA",
+                legend.labs = c("Group 1", "Group 2", "Group 3", "Group 4"),
+                palette = c("blue", "green", "yellow", "red"))
+
+g$table <- g$table +
+        theme(plot.title = element_text(hjust = 0))
+
+print(g)
+
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/bcl2lo_aqua_efs.jpg")
+print(g)
+dev.off()
+
+
+
 
 
 
