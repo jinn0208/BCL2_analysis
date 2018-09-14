@@ -135,7 +135,7 @@ pos$Q1.ratio <- (pos$Q1 / pos$total) * 100
 pos <- dplyr::select(pos, c(1,4))
 
 # merge cell data and medical data
-df.amc <- inner_join(pos, med.data, by = "SN")
+df.amc <- inner_join(pos, df.amc, by = "SN")
 
 # cox proportional hazard model for Q1 ratio
 fit <- coxph(Surv(mon.os, OS == 1) ~ Q1.ratio, data = df.amc)
@@ -146,7 +146,7 @@ df.amc$cut50 <- ifelse(df.amc$Q1.ratio < 50, 0, 1)
 df.amc$cut50 <- factor(df.amc$cut50, levels = c(0,1), 
                        labels = c("Negative", "Positive"))
 
-# K-M curve
+# K-M curve (OS)
 fit <- survfit(Surv(mon.os, OS == 1) ~ cut50, data = df.amc)
 g <- ggsurvplot(fit,
                 surv.plot.height = 0.8,
@@ -170,4 +170,114 @@ jpeg(filename = "D:/Study/BCL2/bcl2 figure/blc2_os_conventional.jpg")
 print(g)
 dev.off()
 
+# K-M curve (2yr EFS)
+fit <- survfit(Surv(mon.2yr.efs, yr2.Event == 1) ~ cut50, 
+               data = df.amc)
+g <- ggsurvplot(fit,
+                surv.plot.height = 0.8,
+                pval = TRUE, pval.size = 4,
+                xlab = "Time (month)", font.x = 12,
+                ylab = "2yr EFS", font.y = 12,
+                risk.table = TRUE, risk.table.height = 0.35,
+                risk.table.fontsize = 3.5,
+                risk.table.y.text.col = FALSE,
+                legend = "right",
+                legend.tital = "BCL2",
+                legend.labs = c("Negative", "Positive"),
+                palette = c("blue", "red"))
+
+g$table <- g$table +
+        theme(plot.title = element_text(hjust = 0))
+
+print(g)
+
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/blc2_efs_conventional.jpg")
+print(g)
+dev.off()
+
+# Distribution of MYC expression on tumor cells
+summary(df.cd20$nor.myc)
+# Min 0.00000 / 1Q 0.04862 / Median 0.06973 / 3Q 0.10430 / Max 1.00000
+
+# Histogram of MYC expression on tumor cells
+options(scipen = 999)
+g <- qplot(nor.myc, data = df.cd20, geom = "histogram", color = "black",
+           bins = 100)
+
+print(g)
+
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/myc.jpg")
+print(g)
+dev.off()
+
+# Using intensity cutpoint (0.1)
+df.cd20$myc.1 <- ifelse(df.cd20$nor.myc < 0.1, 0, 1)
+myc.1 <- aggregate(myc.1 ~ SN, data = df.cd20, FUN = sum)
+myc.pos <- inner_join(myc.1, tot, by = "SN")
+myc.pos$myc.ratio <- (myc.pos$myc.1 / myc.pos$total) * 100
+myc.pos <- dplyr::select(myc.pos, c(1,4))
+
+# merge cell data and medical data
+df.amc <- inner_join(myc.pos, med.data, by = "SN")
+
+# cox proportional hazard model for myc ratio
+fit <- coxph(Surv(mon.os, OS == 1) ~ myc.ratio, data = df.amc)
+summary(fit) # p value = 0.0204 / exp(coef) = 1.011228
+
+# 40% proportional cutpoint
+df.amc$myc40 <- ifelse(df.amc$myc.ratio < 40, 0, 1)
+df.amc$myc40 <- factor(df.amc$myc40, levels = c(0,1), 
+                       labels = c("Negative", "Positive"))
+
+# K-M curve (OS)
+fit <- survfit(Surv(mon.os, OS == 1) ~ myc40, data = df.amc)
+g <- ggsurvplot(fit,
+                surv.plot.height = 0.8,
+                pval = TRUE, pval.size = 4,
+                xlab = "Time (month)", font.x = 12,
+                ylab = "OS", font.y = 12,
+                risk.table = TRUE, risk.table.height = 0.35,
+                risk.table.fontsize = 3.5,
+                risk.table.y.text.col = FALSE,
+                legend = "right",
+                legend.tital = "MYC",
+                legend.labs = c("Negative", "Positive"),
+                palette = c("blue", "red"))
+
+g$table <- g$table +
+        theme(plot.title = element_text(hjust = 0))
+
+print(g)
+
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/myc_os_conventional.jpg")
+print(g)
+dev.off()
+
+# K-M curve (2yr EFS)
+fit <- survfit(Surv(mon.2yr.efs, yr2.Event == 1) ~ myc40, 
+               data = df.amc)
+g <- ggsurvplot(fit,
+                surv.plot.height = 0.8,
+                pval = TRUE, pval.size = 4,
+                xlab = "Time (month)", font.x = 12,
+                ylab = "2yr EFS", font.y = 12,
+                risk.table = TRUE, risk.table.height = 0.35,
+                risk.table.fontsize = 3.5,
+                risk.table.y.text.col = FALSE,
+                legend = "right",
+                legend.tital = "MYC",
+                legend.labs = c("Negative", "Positive"),
+                palette = c("blue", "red"))
+
+g$table <- g$table +
+        theme(plot.title = element_text(hjust = 0))
+
+print(g)
+
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/myc_efs_conventional.jpg")
+print(g)
+dev.off()
+###################################################################
+############# BCL2 analysis using AQUA score ######################
+###################################################################
 
