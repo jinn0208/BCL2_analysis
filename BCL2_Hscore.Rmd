@@ -1,5 +1,5 @@
 ---
-title: "BCL2 H-score"
+title: "BCL2_Hscore"
 author: "Jin Roh"
 date: "2018년 9월 23일"
 output: html_document
@@ -268,12 +268,14 @@ Compare conventional method vs H-score
 5. Drawing ROC groups and compare  
 
 ```{r}
-# 1. Classify patients as 4 groups using 10, 50, 90th percentile
-# 26.24371 / 124.27153 / 272.64951
+# 1. Classify patients as 4 groups using 4 quantile
+# 68.35595 / 124.27153 / 234.28068
 df <- dplyr::mutate(df, 
-                    HscoreGr4 = ifelse(Hscore < 26,1,
-                                       ifelse(Hscore >= 26 & Hscore < 124,2,
-                                              ifelse(Hscore > 272, 4, 3))))
+                    HscoreGr4 = ifelse(Hscore < 68.35595, 1,
+                                       ifelse(Hscore >= 68.35595 & 
+                                                      Hscore < 124.27153,2,
+                                              ifelse(Hscore > 234.28068, 
+                                                     4, 3))))
 ```
 
 ```{r}
@@ -288,10 +290,9 @@ g <- ggsurvplot(fit,
                 risk.table = TRUE, risk.table.height = 0.35,
                 risk.table.fontsize = 3.5,
                 risk.table.y.text.col = FALSE,
-                legend = "bottom",
+                legend = "right",
                 legend.title = "BCL2 H-score",
-                legend.labs = c("<10th Q", ">=10th Q & <50th Q",
-                                ">=50th Q & <90th Q", ">90th Q"),
+                legend.labs = c("1Q", "2Q", "3Q", "4Q"),
                 palette = c("blue", "green", "yellow", "red"))
 
 g$table <- g$table +
@@ -306,6 +307,33 @@ print(g)
 dev.off()
 ```
 
+```{r}
+fit <- survfit(Surv(mon.2yr.efs, yr2.Event == 1) ~ HscoreGr4, data = df)
+
+g <- ggsurvplot(fit,
+                surv.plot.height = 0.8,
+                pval = FALSE,
+                xlab = "Time (month)", font.x = 12,
+                ylab = "2yr EFS", font.y = 12,
+                risk.table = TRUE, risk.table.height = 0.35,
+                risk.table.fontsize = 3.5,
+                risk.table.y.text.col = FALSE,
+                legend = "right",
+                legend.title = "BCL2 H-score",
+                legend.labs = c("1Q", "2Q", "3Q", "4Q"),
+                palette = c("blue", "green", "yellow", "red"))
+
+g$table <- g$table +
+        theme(plot.title = element_text(hjust = 0))
+
+print(g)
+```
+
+```{r}
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/Bcl2HscoreEFS4gr.jpg")
+print(g)
+dev.off()
+```
 
 ```{r}
 # 3. Classify patients as 2 groups using conventional method (50% proportion)
@@ -406,36 +434,298 @@ auc.Conv@y.values
 # 0.538961
 ```
 
+Tumor specific AQUA score vs IHC H-score vs conventional method   
+
+1. Calculate tumor specific AQUA score (AMC + Ajou)
+2. Compare ROC curves of three methods
+
+```{r}
+# 1. Calculate tumor specific AQUA score
+# 1-1. AMC
+amc.raw <- read.csv("D:/Study/BCL2/df_total_180121.csv", 
+               stringsAsFactors = FALSE)
+amc.raw$phenotype[which(amc.raw$phenotype == "CD20 -")] <- "CD20-"
+amc.raw$phenotype[which(amc.raw$phenotype == "CD20+ Mb")] <- "CD20+"
+amc.raw$phenotype[which(amc.raw$phenotype == "CD20- Mb")] <- "CD20-"
+df.bcl2 <- dplyr::select(amc.raw, c(phenotype, x_position, y_position, nuc_DAPI_mean, nuc_myc_mean, cyt_bcl2_mean, slideID, rowTMA, colTMA, confidence, SN, batch))
+df.bcl2 <- dplyr::filter(df.bcl2, confidence > 79.16)
+df.bcl2$cyt_bcl2_mean[which(df.bcl2$cyt_bcl2_mean == "#N/A")] <- 0
+df.bcl2$cyt_bcl2_mean <- as.numeric(df.bcl2$cyt_bcl2_mean)
+df.cd20 <- dplyr::filter(df.bcl2, phenotype == "CD20+")
+df.cd3 <- dplyr::filter(df.bcl2, phenotype == "CD3+")
+
+#remove batch effect of BCL2 in tumor cells
+nl.2 <- as.matrix(df.cd20$cyt_bcl2_mean)
+batch2 <- as.factor(df.cd20$batch)
+nl.2 <- as.data.frame(ber(nl.2, batch2))
+nl.2 <- dplyr::rename(nl.2, bcl2 = V1)
+df.cd20 <- cbind(df.cd20, nl.2)
+
+# remove batch effect of BCL2 in CD3
+nl.3 <- as.matrix(df.cd3$cyt_bcl2_mean)
+batch3 <- as.factor(df.cd3$batch)
+nl.3 <- as.data.frame(ber(nl.3, batch3))
+nl.3 <- dplyr::rename(nl.3, bcl2 = V1)
+df.cd3 <- cbind(df.cd3, nl.3)
+
+# remove batch effect of MYC in tumor cells
+nl.1 <- as.matrix(df.cd20$nuc_myc_mean)
+batch1 <- as.factor(df.cd20$batch)
+nl.1 <- as.data.frame(ber(nl.1, batch1))
+nl.1 <- dplyr::rename(nl.1, myc = V1)
+df.cd20 <- cbind(df.cd20, nl.1)
+
+# normalize BCL2 and MYC data
+df.cd20$nor.bcl2 <- 
+        (df.cd20$bcl2 - min(df.cd20$bcl2))/(max(df.cd20$bcl2) - min(df.cd20$bcl2))
+
+df.cd3$nor.bcl2 <- 
+        (df.cd3$bcl2 - min(df.cd3$bcl2))/(max(df.cd3$bcl2) - min(df.cd3$bcl2))
+
+df.cd20$nor.myc <- 
+        (df.cd20$myc - min(df.cd20$myc)) / (max(df.cd20$myc) - min(df.cd20$myc))
+
+# calculate BCL2 AQUA score
+aq.bcl2 <- aggregate(nor.bcl2 ~ SN, data = df.cd20, FUN = sum)
+tot <- aggregate(nor.bcl2 ~ SN, data = df.cd20, FUN = length)
+tot <- dplyr::rename(tot, total = nor.bcl2)
+aqua.b <- inner_join(aq.bcl2, tot, by = ("SN" = "SN"))
+aqua.b <- dplyr::mutate(aqua.b, aq.bcl2 = nor.bcl2 / total)
+
+# calculate MYC AQUA score
+aq.myc <- aggregate(nor.myc ~ SN, data = df.cd20, FUN = sum)
+aqua.m <- inner_join(aq.myc, tot, by = ("SN" = "SN"))
+aqua.m <- dplyr::mutate(aqua.m, aq.myc = nor.myc / total)
+```
+
+```{r}
+# 1-2. Ajou
+# open ajou data
+setwd("D:/Study/BCL2/ajou_cell_data")
+files <- list.files()
+big.df <- lapply(files, function(x) {
+        read_delim(x, delim = "\t", col_names = T,
+                   col_types = cols("TMA Column" = "c"))
+})
+
+df.ajou <- do.call(rbind, big.df)
+
+slideID <- substr(df.ajou$`Sample Name`, 10, 14)
+df.ajou <- dplyr::select(df.ajou, c(3, 7, 8, 15, 35, 50, 85, 132, 133, 135))
+df.ajou <- dplyr::mutate(df.ajou, slideID = slideID)
+df.ajou <- dplyr::rename(df.ajou, 
+                          phenotype = Phenotype,
+                          x_position = `Cell X Position`,
+                          y_position = `Cell Y Position`,
+                          nuc_DAPI_mean = `Nucleus DAPI Mean (Normalized Counts, Total Weighting)`,
+                         nuc_myc_mean = `Nucleus MYC (Opal 690) Mean (Normalized Counts, Total Weighting)`,
+                         mb_cd3_mean = `Membrane CD3 (Opal 570) Mean (Normalized Counts, Total Weighting)`,
+                          cyt_bcl2_mean = `Cytoplasm BCL2 (Opal 520) Mean (Normalized Counts, Total Weighting)`,
+                          slideID = slideID,
+                          rowTMA = `TMA Row`,
+                          colTMA = `TMA Column`,
+                          confidence = Confidence)
+
+df.ajou$confidence <- gsub("%", "", df.ajou$confidence)
+df.ajou$confidence <- as.numeric(df.ajou$confidence)
+
+df.ajou <- dplyr::filter(df.ajou, confidence > 85.12)
+df.ajou$cyt_bcl2_mean[which(df.ajou$cyt_bcl2_mean == "#N/A")] <- 0
+df.ajou$cyt_bcl2_mean[which(is.na(df.ajou$cyt_bcl2_mean) == 1)] <- 0
+df.ajou$cyt_bcl2_mean <- as.numeric(df.ajou$cyt_bcl2_mean)
+
+ajou.cd20 <- dplyr::filter(df.ajou, phenotype == "CD20+")
+
+# mapping
+ajou.cd20 <- mutate(ajou.cd20, SN = "")
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(1,2) & ajou.cd20$colTMA == "A"] <- "S10-10973"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(3,4,5) & ajou.cd20$colTMA == "A"] <- "S10-08132"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(6,7,8) & ajou.cd20$colTMA == "A"] <- "S10-06266"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(9,10,11) & ajou.cd20$colTMA == "A"] <- "S10-02091"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(12,13,14) & ajou.cd20$colTMA == "A"] <- "S10-01513"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(15,16,17) & ajou.cd20$colTMA == "A"] <- "S10-00617"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(1) & ajou.cd20$colTMA == "B"] <- "S11-03428"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(2) & ajou.cd20$colTMA == "B"] <- "S10-30337"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(3,4,5) & ajou.cd20$colTMA == "B"] <- "S10-28695"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(6) & ajou.cd20$colTMA == "B"] <- "S10-21987"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(7,8,9) & ajou.cd20$colTMA == "B"] <- "S10-19810"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(10,11,12) & ajou.cd20$colTMA == "B"] <- "S10-19642"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(13,14,15) & ajou.cd20$colTMA == "B"] <- "S10-18498"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(16,17) & ajou.cd20$colTMA == "B"] <- "S10-16804"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(1) & ajou.cd20$colTMA == "C"] <- "S11-35044"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(2,3) & ajou.cd20$colTMA == "C"] <- "S11-04715"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(4,5) & ajou.cd20$colTMA == "C"] <- "S11-04562"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(6,7) & ajou.cd20$colTMA == "C"] <- "S11-02034"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(8,9) & ajou.cd20$colTMA == "C"] <- "S10-37159"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(10,11) & ajou.cd20$colTMA == "C"] <- "S10-36414"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(12,13) & ajou.cd20$colTMA == "C"] <- "S10-36413"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(14,15) & ajou.cd20$colTMA == "C"] <- "S10-30672"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(16,17) & ajou.cd20$colTMA == "C"] <- "S10-30505"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(1,2,3) & ajou.cd20$colTMA == "D"] <- "S11-34980"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(4,5) & ajou.cd20$colTMA == "D"] <- "S11-29741"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(6,7) & ajou.cd20$colTMA == "D"] <- "S11-27223"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(8,9) & ajou.cd20$colTMA == "D"] <- "S11-18245"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(10,11) & ajou.cd20$colTMA == "D"] <- "S11-15339"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(12,13) & ajou.cd20$colTMA == "D"] <- "S11-10209"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(14,15) & ajou.cd20$colTMA == "D"] <- "S11-10262"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(16,17) & ajou.cd20$colTMA == "D"] <- "S11-05010"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(1,2,3) & ajou.cd20$colTMA == "E"] <- "S11-42588"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(4,5) & ajou.cd20$colTMA == "E"] <- "S11-39582"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(6,7) & ajou.cd20$colTMA == "E"] <- "S11-38732"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(8,9) & ajou.cd20$colTMA == "E"] <- "S11-38642"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(10,11) & ajou.cd20$colTMA == "E"] <- "S11-38550"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(12,13) & ajou.cd20$colTMA == "E"] <- "S11-37815"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(14,15) & ajou.cd20$colTMA == "E"] <- "S11-37253"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(16,17) & ajou.cd20$colTMA == "E"] <- "S11-36536"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(1,2,3) & ajou.cd20$colTMA == "F"] <- "S12-21233"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(4,5) & ajou.cd20$colTMA == "F"] <- "S12-19368"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(6,7) & ajou.cd20$colTMA == "F"] <- "S12-17734"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(8,9) & ajou.cd20$colTMA == "F"] <- "S12-15256"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(10,11) & ajou.cd20$colTMA == "F"] <- "S12-15051"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(12,13) & ajou.cd20$colTMA == "F"] <- "S12-10717"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(14,15) & ajou.cd20$colTMA == "F"] <- "S11-43478"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(16,17) & ajou.cd20$colTMA == "F"] <- "S11-42694"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(1,2,3) & ajou.cd20$colTMA == "G"] <- "S12-38447"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(4,5) & ajou.cd20$colTMA == "G"] <- "S12-31592"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(6,7) & ajou.cd20$colTMA == "G"] <- "S12-30651"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(8,9) & ajou.cd20$colTMA == "G"] <- "S12-29004"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(10,11) & ajou.cd20$colTMA == "G"] <- "S12-26274"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(12,13) & ajou.cd20$colTMA == "G"] <- "S12-25583"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(14,15) & ajou.cd20$colTMA == "G"] <- "S12-24493"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(16,17) & ajou.cd20$colTMA == "G"] <- "S12-21940"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(1) & ajou.cd20$colTMA == "H"] <- "S12-17734"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(2,3) & ajou.cd20$colTMA == "H"] <- "S11-15339"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(4,5) & ajou.cd20$colTMA == "H"] <- "S10-02091"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(6,7) & ajou.cd20$colTMA == "H"] <- "S12-19368"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(8,9,10) & ajou.cd20$colTMA == "H"] <- "S12-43086"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(11,12,13) & ajou.cd20$colTMA == "H"] <- "S12-42683"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(14,15) & ajou.cd20$colTMA == "H"] <- "S12-42480"
+ajou.cd20$SN[ajou.cd20$rowTMA %in% c(16,17) & ajou.cd20$colTMA == "H"] <- "S12-39969"
+
+# normalize Bcl-2 data
+ajou.cd20$nor.bcl2 <- (ajou.cd20$cyt_bcl2_mean - min(ajou.cd20$cyt_bcl2_mean))/(max(ajou.cd20$cyt_bcl2_mean) - min(ajou.cd20$cyt_bcl2_mean))
+
+# calculate Bcl2 AQUA score
+aq.bcl2 <- aggregate(nor.bcl2 ~ SN, data = ajou.cd20, FUN = sum)
+tot <- aggregate(nor.bcl2 ~ SN, data = ajou.cd20, FUN = length)
+tot <- dplyr::rename(tot, total = nor.bcl2)
+aqua.ajou <- inner_join(aq.bcl2, tot, by = ("SN" = "SN"))
+aqua.ajou <- dplyr::mutate(aqua.ajou, aq.bcl2 = nor.bcl2 / total)
+```
+
+```{r}
+df.aqua <- rbind(aqua.b, aqua.ajou)
+df.aqua <- dplyr::select(df.aqua, c(1, 4))
+```
+
+```{r}
+df.final <- inner_join(df, df.aqua, by = "SN")
+```
+
+```{r}
+# 2. Compare ROC curves and AUROC between three methods
+# 2-1. ROC curves
+pred.Hscore <- prediction(df.final$Hscore, df.final$OS)
+pred.aqua <- prediction(df.final$aq.bcl2, df.final$OS)
+pred.conv <- prediction(df.final$ConvGr, df.final$OS)
+
+roc.Hscore <- performance(pred.Hscore, measure = "tpr", x.measure = "fpr")
+roc.aqua <- performance(pred.aqua, measure = "tpr", x.measure = "fpr")
+roc.conv <- performance(pred.conv, measure = "tpr", x.measure = "fpr")
 
 
+plot(roc.Hscore, col = "blue")
+plot(roc.aqua, col = "red", add = TRUE)
+plot(roc.conv, col = "black", add = TRUE)
+abline(a = 0, b = 1)
+```
 
+```{r}
+jpeg(filename = "D:/Study/BCL2/bcl2 figure/ROCcomp3.jpg")
+plot(roc.Hscore, col = "blue")
+plot(roc.aqua, col = "red", add = TRUE)
+plot(roc.conv, col = "black", add = TRUE)
+abline(a = 0, b = 1)
+dev.off()
+```
 
+```{r}
+# 2-2. AUROC
+auc.Hscore <- performance(pred.Hscore, measure = "auc")
+auc.Hscore@y.values
+# 0.6301659
+```
 
+```{r}
+auc.conv <- performance(pred.conv, measure = "auc")
+auc.conv@y.values
+# 0.5373303
+```
 
+```{r}
+auc.aqua <- performance(pred.aqua, measure = "auc")
+auc.aqua@y.values
+# 0.6589744
+```
 
+Additional analysis (Multivariate analysis)
 
+1. Prepare data  
+2. Univariate analysis  
+3. Multivariate analysis
 
+```{r}
+# 1. Prepare data
+df.amc <- inner_join(aqua.b, med.amc, by = "SN")
+df.amc <- mutate(df.amc, 
+                   bcl2.gr = ifelse(aq.bcl2 < 0.1125832, 0, 1))
 
+aqua.m <- dplyr::select(aqua.m, c(1, 4))
+df.amc <- inner_join(aqua.m, df.amc, by = "SN")
+df.amc <- dplyr::mutate(df.amc,
+                          myc.gr = ifelse(aq.myc < 0.07325897, 0, 1))
 
+df.amc.cox <- dplyr::filter(df.amc, COO %in% c(1, 2))
+df.amc.cox$IPI.gr <- ifelse(df.amc.cox$IPI %in% c(3,4,5), 1, 0)
 
+df.amc.cox$COO <- factor(df.amc.cox$COO, 
+                         levels = c(1, 2),
+                         labels = c("GCB", "Non-GCB"))
+df.amc.cox$IPI.gr <- factor(df.amc.cox$IPI.gr,
+                            levels = c(0, 1),
+                            labels = c("Low", "High"))
+df.amc.cox$bcl2.gr <- factor(df.amc.cox$bcl2.gr,
+                             levels = c(0, 1),
+                             labels = c("Low", "High"))
+```
 
+```{r}
+# 2. Univariate analysis
+# 2-1. BCL2
+summary(coxph(Surv(mon.os, OS == 1) ~ bcl2.gr, data = df.amc.cox))
+```
 
+```{r}
+# 2-2. MYC
+summary(coxph(Surv(mon.os, OS == 1) ~ myc.gr, data = df.amc.cox))
+```
 
+```{r}
+# 2-3. COO
+summary(coxph(Surv(mon.os, OS == 1) ~ COO, data = df.amc.cox))
+```
 
+```{r}
+# 2-4. IPI.gr
+summary(coxph(Surv(mon.os, OS == 1) ~ IPI.gr, data = df.amc.cox))
+```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+```{r}
+# 3. Multivariate analysis
+summary(coxph(Surv(mon.os, OS == 1) ~ 
+                      bcl2.gr + myc.gr + COO + IPI.gr, 
+              data = df.amc.cox))
+```
 
 
 
